@@ -11,6 +11,8 @@ Sequential = tf.keras.Sequential
 Dropout = tf.keras.layers.Dropout
 MaxPooling2D = tf.keras.layers.MaxPooling2D
 BatchNormalization = tf.keras.layers.BatchNormalization
+TimeDistributed = tf.keras.layers.TimeDistributed
+LSTM = tf.keras.layers.LSTM
 
 
 def reshape_tensor(data):
@@ -30,6 +32,27 @@ def timeseries_shapes(train_X, train_y):
     n_timesteps, n_features, n_outputs = train_X.shape[1], train_X.shape[2], train_y.shape[1]
 
     return (n_timesteps, n_features, n_outputs)
+
+
+def build_cnn_lstm(n_timesteps, n_features, n_outputs):
+    model = Sequential()
+    model.add(TimeDistributed(Conv2D(8, n_features, padding="same",
+                                     activation="relu"), input_shape=(n_timesteps, n_features, 1)))
+    model.add(TimeDistributed(MaxPooling2D((3, 3))))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(
+        Conv2D(32, (4, 1), padding="same", activation="relu")))
+    model.add(TimeDistributed(MaxPooling2D((3, 1))))
+    model.add(TimeDistributed(BatchNormalization()))
+
+    model.add(TimeDistributed(Flatten()))
+    model.add(LSTM(100))
+    model.add(Dropout(0.5))
+    model.add(Dense(8, activation="relu"))
+    model.add(Dropout(0.1))
+    model.add(Dense(n_outputs, activation="softmax"))
+    # model.summary()
+    return model
 
 
 def build_cnn(n_timesteps, n_features, n_outputs):
@@ -62,6 +85,8 @@ def prepare_training_data_shape(train_X, test_X):
 def get_ml_model(variant, timesteps, features, outputs):
     if(variant == 'cnn'):
         return build_cnn(timesteps, features, outputs)
+    elif(variant == 'cnn_lstm'):
+        return build_cnn_lstm(timesteps, features, outputs)
     pass
 
 
@@ -82,6 +107,7 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
             monitor='val_loss', save_best_only=True, mode="min"),
         keras.callbacks.EarlyStopping(monitor='accuracy', patience=5)
     ]
+    print(train_X.shape)
     model.compile(loss="categorical_crossentropy",
                   optimizer="adam", metrics=["accuracy"])
     history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
@@ -92,4 +118,3 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
         test_X, test_y, batch_size=batch_size, verbose=verbose)
 
     return model, history, evaluation_history
-

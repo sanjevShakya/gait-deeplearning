@@ -4,6 +4,12 @@ from gait.config import pd
 from gait.config import np
 from gait.constants import ROOT_DATA_DIR, SUBJECT_FILE, Y_FILE, X_PATH, X_LABELS
 
+SENSORS = {
+    "LEFT": "LEFT",
+    "RIGHT": "RIGHT",
+}
+SENSORS_LIST = [SENSORS["LEFT"], SENSORS["RIGHT"]]
+
 
 def get_X_files(label):
     '''
@@ -44,8 +50,8 @@ def load_group(filenames):
     return loaded
 
 
-def path_builder(overlapPercent, fileName, prefix=""):
-    return ROOT_DATA_DIR + get_data_overlap_folder(overlapPercent) + '/' + prefix + fileName
+def path_builder(overlapPercent, sensorName, fileName, prefix=""):
+    return ROOT_DATA_DIR + sensorName + "/" + get_data_overlap_folder(overlapPercent) + '/' + prefix + fileName
 
 
 def get_unique_subjects(subjects):
@@ -53,21 +59,41 @@ def get_unique_subjects(subjects):
 
 
 def get_data_by_overlap_percent(overlapPercent):
-    subject_file_path = path_builder(overlapPercent, SUBJECT_FILE)
-    y_file_path = path_builder(overlapPercent, Y_FILE)
-    x_files = list(map(lambda label: get_X_files(label), X_LABELS))
-    X_files_path = list(
-        map(lambda fileName: path_builder(overlapPercent, fileName, prefix=X_PATH), x_files))
-    X = load_group(X_files_path)
-    y = load_file(y_file_path)
-    subject = load_file(subject_file_path)
 
+    subject_file_path_left = path_builder(
+        overlapPercent, SENSORS["LEFT"], SUBJECT_FILE)
+    y_file_path_left = path_builder(overlapPercent, SENSORS["LEFT"],  Y_FILE)
+    x_files = list(map(lambda label: get_X_files(label), X_LABELS))
+    X_files_path_left = list(
+        map(lambda fileName: path_builder(overlapPercent, SENSORS["LEFT"], fileName, prefix=X_PATH), x_files))
+    X_left = load_group(X_files_path_left)
+    y_left = load_file(y_file_path_left)
+    subject_left = load_file(subject_file_path_left)
+
+    subject_file_path_right = path_builder(
+        overlapPercent, SENSORS["RIGHT"], SUBJECT_FILE)
+    y_file_path_right = path_builder(overlapPercent, SENSORS["RIGHT"],  Y_FILE)
+    x_files = list(map(lambda label: get_X_files(label), X_LABELS))
+    X_files_path_right = list(
+        map(lambda fileName: path_builder(overlapPercent, SENSORS["RIGHT"], fileName, prefix=X_PATH), x_files))
+    X_right = load_group(X_files_path_right)
+    y_right = load_file(y_file_path_right)
+    subject_right = load_file(subject_file_path_right)
+    X = np.concatenate((X_left, X_right), axis=0)
+    y = np.concatenate((y_left, y_right), axis=0)
+    subject = np.concatenate((subject_left, subject_right), axis=0)
     return (X, y, subject)
 
 
-def split_test_train_by_subjects(X, y, subjects, train_percent=0.8):
+def filter_excluded_subject(subjects, excluded_subjects):
+    return [subject for subject in subjects if subject not in excluded_subjects]
+
+
+def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subjects=[]):
     unique_subjects = get_unique_subjects(subjects)
+    unique_subjects = filter_excluded_subject(unique_subjects, exclude_subjects)
     np.random.shuffle(unique_subjects)
+    print('UNIQUE>>>>>>>', unique_subjects)
     M = len(unique_subjects)
     m_train = int(M * train_percent)
     train_subjects = unique_subjects[0:m_train]
