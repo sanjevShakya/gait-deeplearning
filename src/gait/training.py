@@ -6,6 +6,7 @@ from gait.utils import create_dir
 keras = tf.keras
 Dense = tf.keras.layers.Dense
 Conv2D = tf.keras.layers.Conv2D
+SeparableConv2D = tf.keras.layers.SeparableConv2D
 Flatten = tf.keras.layers.Flatten
 Sequential = tf.keras.Sequential
 Dropout = tf.keras.layers.Dropout
@@ -72,6 +73,29 @@ def build_cnn(n_timesteps, n_features, n_outputs):
     return model
 
 
+def build_dsconv_cnn(n_timesteps, n_features, n_outputs):
+    model = Sequential()
+    model.add(Conv2D(8, n_features, padding="same",
+                     activation="relu", input_shape=(n_timesteps, n_features, 1)))
+    model.add(MaxPooling2D((3, 3)))
+    model.add(BatchNormalization())
+
+    model.add(SeparableConv2D(16, (4, 1), padding="same", activation="relu"))
+    model.add(MaxPooling2D((3, 1)))
+    model.add(BatchNormalization())
+
+    model.add(SeparableConv2D(32, (4, 1), padding="same", activation="relu"))
+    model.add(MaxPooling2D((3, 1)))
+    model.add(BatchNormalization())
+
+    model.add(Flatten())
+    model.add(Dense(8, activation="relu"))
+    model.add(Dropout(0.1))
+    model.add(Dense(n_outputs, activation="softmax"))
+    model.summary()
+    return model
+
+
 def prepare_training_data_shape(train_X, test_X):
     train_X_shape = train_X.shape
     test_X_shape = test_X.shape
@@ -87,6 +111,9 @@ def get_ml_model(variant, timesteps, features, outputs):
         return build_cnn(timesteps, features, outputs)
     elif(variant == 'cnn_lstm'):
         return build_cnn_lstm(timesteps, features, outputs)
+    elif(variant == 'dsconvcnn'):
+        return build_dsconv_cnn(timesteps, features, outputs)
+    
     pass
 
 
@@ -105,7 +132,7 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
         keras.callbacks.ModelCheckpoint(
             filepath=model_filepath,
             monitor='val_loss', save_best_only=True, mode="min"),
-        keras.callbacks.EarlyStopping(monitor='accuracy', patience=5)
+        keras.callbacks.EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.8)
     ]
     print(train_X.shape)
     model.compile(loss="categorical_crossentropy",

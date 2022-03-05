@@ -58,12 +58,12 @@ def get_unique_subjects(subjects):
     return np.unique(subjects)
 
 
-def get_data_by_overlap_percent(overlapPercent):
+def get_data_by_overlap_percent(overlapPercent, xLabels = X_LABELS):
 
     subject_file_path_left = path_builder(
         overlapPercent, SENSORS["LEFT"], SUBJECT_FILE)
     y_file_path_left = path_builder(overlapPercent, SENSORS["LEFT"],  Y_FILE)
-    x_files = list(map(lambda label: get_X_files(label), X_LABELS))
+    x_files = list(map(lambda label: get_X_files(label), xLabels))
     X_files_path_left = list(
         map(lambda fileName: path_builder(overlapPercent, SENSORS["LEFT"], fileName, prefix=X_PATH), x_files))
     X_left = load_group(X_files_path_left)
@@ -73,7 +73,7 @@ def get_data_by_overlap_percent(overlapPercent):
     subject_file_path_right = path_builder(
         overlapPercent, SENSORS["RIGHT"], SUBJECT_FILE)
     y_file_path_right = path_builder(overlapPercent, SENSORS["RIGHT"],  Y_FILE)
-    x_files = list(map(lambda label: get_X_files(label), X_LABELS))
+    x_files = list(map(lambda label: get_X_files(label), xLabels))
     X_files_path_right = list(
         map(lambda fileName: path_builder(overlapPercent, SENSORS["RIGHT"], fileName, prefix=X_PATH), x_files))
     X_right = load_group(X_files_path_right)
