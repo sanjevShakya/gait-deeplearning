@@ -132,7 +132,7 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
         keras.callbacks.ModelCheckpoint(
             filepath=model_filepath,
             monitor='val_loss', save_best_only=True, mode="min"),
-        keras.callbacks.EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.8)
+        keras.callbacks.EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.8, patience=30)
     ]
     print(train_X.shape)
     model.compile(loss="categorical_crossentropy",
