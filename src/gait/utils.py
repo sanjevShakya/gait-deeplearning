@@ -58,7 +58,15 @@ def get_unique_subjects(subjects):
     return np.unique(subjects)
 
 
-def get_data_by_overlap_percent(overlapPercent, xLabels = X_LABELS):
+def remove_invalid_data(X, y, subjects):
+    nan_indexes = np.where(y == 'nan')
+    y = np.delete(y, nan_indexes[0], axis=0)
+    subjects = np.delete(subjects, nan_indexes[0], axis=0)
+    X = np.delete(X, nan_indexes[0], axis=0)
+    return X, y, subjects
+
+
+def get_data_by_overlap_percent(overlapPercent, xLabels=X_LABELS):
 
     subject_file_path_left = path_builder(
         overlapPercent, SENSORS["LEFT"], SUBJECT_FILE)
@@ -82,6 +90,8 @@ def get_data_by_overlap_percent(overlapPercent, xLabels = X_LABELS):
     X = np.concatenate((X_left, X_right), axis=0)
     y = np.concatenate((y_left, y_right), axis=0)
     subject = np.concatenate((subject_left, subject_right), axis=0)
+    y = np.array(y, dtype="str")
+    subject = np.array(subject, dtype="str")
     return (X, y, subject)
 
 
@@ -91,7 +101,8 @@ def filter_excluded_subject(subjects, excluded_subjects):
 
 def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subjects=[]):
     unique_subjects = get_unique_subjects(subjects)
-    unique_subjects = filter_excluded_subject(unique_subjects, exclude_subjects)
+    unique_subjects = filter_excluded_subject(
+        unique_subjects, exclude_subjects)
     np.random.shuffle(unique_subjects)
     print('UNIQUE>>>>>>>', unique_subjects)
     M = len(unique_subjects)
@@ -105,9 +116,13 @@ def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subj
     test_X = X[test_idx, :]
     train_y = y[train_idx, :]
     test_y = y[test_idx, :]
+    train_y = np.array(train_y, dtype=float)
+    test_y = np.array(test_y, dtype=float)
+    train_y = np.array(train_y, dtype=int)
+    test_y = np.array(test_y, dtype=int)
 
-    train_y = train_y - 1
-    test_y = test_y - 1
+    train_y = train_y
+    test_y = test_y
     encoded_train_y = tf.keras.utils.to_categorical(train_y)
     encoded_test_y = tf.keras.utils.to_categorical(test_y)
 
