@@ -86,3 +86,11 @@ def compute_validations_predictions(model, X_test, y_test):
     max_y_test = np.argmax(y_test, axis=1)
 
     return max_y_pred_test, max_y_test
+
+
+def compute_validations_predictions_with_stats(model, X_test, y_test, X_test_stats):
+    y_pred_test = model.predict([X_test, X_test_stats])
+    max_y_pred_test = np.argmax(y_pred_test, axis=1)
+    max_y_test = np.argmax(y_test, axis=1)
+
+    return max_y_pred_test, max_y_test
