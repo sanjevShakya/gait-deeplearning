@@ -3,12 +3,16 @@ import tensorflow as tf
 from gait.config import pd
 from gait.config import np
 from gait.constants import ROOT_DATA_DIR, SUBJECT_FILE, Y_FILE, X_PATH, X_LABELS
+from numpy import genfromtxt
 
 SENSORS = {
     "LEFT": "LEFT",
     "RIGHT": "RIGHT",
 }
 SENSORS_LIST = [SENSORS["LEFT"], SENSORS["RIGHT"]]
+sessions = ['session1', 'session2', 'session3', 'session4', 'session5', 'session6']
+# sessions = ['session4']
+DEFAULT_SESSIONS = sessions[0]
 
 
 def get_X_files(label):
@@ -34,7 +38,8 @@ def load_file(filename):
     '''
     load data from a filename
     '''
-    dataframe = pd.read_csv(filename, header=None, delimiter=",")
+    dataframe = pd.read_csv(filename, header=None,
+                            delimiter=",")
     return dataframe.values
 
 
@@ -50,8 +55,8 @@ def load_group(filenames):
     return loaded
 
 
-def path_builder(overlapPercent, sensorName, fileName, prefix=""):
-    return ROOT_DATA_DIR + sensorName + "/" + get_data_overlap_folder(overlapPercent) + '/' + prefix + fileName
+def path_builder(session, overlapPercent, sensorName, fileName, prefix=""):
+    return ROOT_DATA_DIR + session + '/' + sensorName + "/" + get_data_overlap_folder(overlapPercent) + '/' + prefix + fileName
 
 
 def get_unique_subjects(subjects):
@@ -59,39 +64,61 @@ def get_unique_subjects(subjects):
 
 
 def remove_invalid_data(X, y, subjects):
-    nan_indexes = np.where(y == 'nan')
-    y = np.delete(y, nan_indexes[0], axis=0)
-    subjects = np.delete(subjects, nan_indexes[0], axis=0)
-    X = np.delete(X, nan_indexes[0], axis=0)
+    nan_indexes = np.argwhere(np.isnan(y))[:, 0]
+    if nan_indexes.size != 0:
+        y = np.delete(y, nan_indexes[0], axis=0)
+        subjects = np.delete(subjects, nan_indexes[0], axis=0)
+        X = np.delete(X, nan_indexes[0], axis=0)
     return X, y, subjects
 
 
-def get_data_by_overlap_percent(overlapPercent, xLabels=X_LABELS):
+def get_overlap_data_all_sessions(overlapPercent, xLabels=X_LABELS):
+    X_list = list()
+    y_list = list()
+    subject_list = list()
+    for session in sessions:
+        X, y, subject = get_data_by_overlap_percent(
+            overlapPercent, xLabels=X_LABELS, session=session)
+        X_list.append(X)
+        y_list.append(y)
+        subject_list.append(subject)
 
-    subject_file_path_left = path_builder(
-        overlapPercent, SENSORS["LEFT"], SUBJECT_FILE)
-    y_file_path_left = path_builder(overlapPercent, SENSORS["LEFT"],  Y_FILE)
+    return np.vstack(X_list), np.vstack(y_list), np.vstack(subject_list)
+
+
+def get_data_by_overlap_percent(overlapPercent, xLabels=X_LABELS, session=DEFAULT_SESSIONS):
+
+    subject_file_path_left = path_builder(session,
+                                          overlapPercent, SENSORS["LEFT"], SUBJECT_FILE)
+    y_file_path_left = path_builder(
+        session, overlapPercent, SENSORS["LEFT"],  Y_FILE)
     x_files = list(map(lambda label: get_X_files(label), xLabels))
     X_files_path_left = list(
-        map(lambda fileName: path_builder(overlapPercent, SENSORS["LEFT"], fileName, prefix=X_PATH), x_files))
+        map(lambda fileName: path_builder(session, overlapPercent, SENSORS["LEFT"], fileName, prefix=X_PATH), x_files))
     X_left = load_group(X_files_path_left)
     y_left = load_file(y_file_path_left)
     subject_left = load_file(subject_file_path_left)
 
-    subject_file_path_right = path_builder(
-        overlapPercent, SENSORS["RIGHT"], SUBJECT_FILE)
-    y_file_path_right = path_builder(overlapPercent, SENSORS["RIGHT"],  Y_FILE)
+    subject_file_path_right = path_builder(session,
+                                           overlapPercent, SENSORS["RIGHT"], SUBJECT_FILE)
+    y_file_path_right = path_builder(
+        session, overlapPercent, SENSORS["RIGHT"],  Y_FILE)
     x_files = list(map(lambda label: get_X_files(label), xLabels))
     X_files_path_right = list(
-        map(lambda fileName: path_builder(overlapPercent, SENSORS["RIGHT"], fileName, prefix=X_PATH), x_files))
+        map(lambda fileName: path_builder(session, overlapPercent, SENSORS["RIGHT"], fileName, prefix=X_PATH), x_files))
     X_right = load_group(X_files_path_right)
     y_right = load_file(y_file_path_right)
     subject_right = load_file(subject_file_path_right)
     X = np.concatenate((X_left, X_right), axis=0)
     y = np.concatenate((y_left, y_right), axis=0)
     subject = np.concatenate((subject_left, subject_right), axis=0)
-    y = np.array(y, dtype="str")
-    subject = np.array(subject, dtype="str")
+
+    X, y, subject = remove_invalid_data(X, y, subject)
+    y = np.array(y, dtype=float)
+    y = np.array(y, dtype=int)
+    y = np.array(y, dtype=str)
+
+    subject = np.array(subject, dtype=str)
     return (X, y, subject)
 
 
@@ -104,7 +131,6 @@ def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subj
     unique_subjects = filter_excluded_subject(
         unique_subjects, exclude_subjects)
     np.random.shuffle(unique_subjects)
-    print('UNIQUE>>>>>>>', unique_subjects)
     M = len(unique_subjects)
     m_train = int(M * train_percent)
     train_subjects = unique_subjects[0:m_train]

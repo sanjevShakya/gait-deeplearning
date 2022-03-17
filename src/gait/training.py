@@ -1,3 +1,4 @@
+from numpy import var
 import tensorflow as tf
 from gait.config import np, pd
 from gait.path import get_log_file_path, get_model_file_path
@@ -15,6 +16,12 @@ BatchNormalization = tf.keras.layers.BatchNormalization
 TimeDistributed = tf.keras.layers.TimeDistributed
 LSTM = tf.keras.layers.LSTM
 AveragePooling2D = tf.keras.layers.AveragePooling2D
+Activation = tf.keras.layers.Activation
+GlobalAveragePooling2D = tf.keras.layers.GlobalAveragePooling2D
+MaxPooling1D = tf.keras.layers.MaxPooling1D
+Conv1D = tf.keras.layers.Conv1D
+GlobalAveragePooling1D = tf.keras.layers.GlobalAveragePooling1D
+
 
 def calculate_model_size(model):
     print(model.summary())
@@ -33,22 +40,28 @@ def timeseries_shapes(train_X, train_y):
 
 def build_cnn_lstm(n_timesteps, n_features, n_outputs):
     model = Sequential()
-    model.add(TimeDistributed(Conv2D(8, n_features, padding="same",
-                                     activation="relu"), input_shape=(n_timesteps, n_features, 1)))
-    model.add(TimeDistributed(MaxPooling2D((3, 3))))
-    model.add(TimeDistributed(BatchNormalization()))
-    model.add(TimeDistributed(
-        Conv2D(32, (4, 1), padding="same", activation="relu")))
-    model.add(TimeDistributed(MaxPooling2D((3, 1))))
-    model.add(TimeDistributed(BatchNormalization()))
 
+    model.add(TimeDistributed(Conv1D(filters=64, kernel_size=n_features),
+                              input_shape=(None, 32, n_features)))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Activation('relu')))
+    model.add(TimeDistributed(Dropout(0.5)))
+
+    model.add(TimeDistributed(
+        Conv1D(filters=64, kernel_size=n_features)))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Activation('relu')))
+    model.add(TimeDistributed(Dropout(0.5)))
+
+    model.add(TimeDistributed(GlobalAveragePooling1D()))
     model.add(TimeDistributed(Flatten()))
+
     model.add(LSTM(100))
     model.add(Dropout(0.5))
-    model.add(Dense(8, activation="relu"))
-    model.add(Dropout(0.1))
-    model.add(Dense(n_outputs, activation="softmax"))
-    # model.summary()
+    model.add(Dense(100, activation='relu'))
+
+    model.add(Dense(n_outputs, activation='softmax'))
+    model.summary()
     return model
 
 
@@ -68,6 +81,37 @@ def build_cnn(n_timesteps, n_features, n_outputs):
     model.summary()
     return model
 
+
+def build_cnn2(n_timesteps, n_features, n_outputs):
+    model = Sequential()
+
+    model.add(Conv2D(8, n_features, strides=2, padding="same",
+              input_shape=(n_timesteps, n_features, 1)))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+
+    model.add(Conv2D(16, n_features * 2, strides=2, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+
+    # model.add(Conv2D(32, n_features * 3, strides=2, padding="same"))
+    # model.add(BatchNormalization())
+    # model.add(Activation('relu'))
+    # model.add(Dropout(0.3))
+
+    model.add(GlobalAveragePooling2D())
+    model.add(Flatten())
+
+    model.add(Dense(8, activation="relu"))
+    model.add(Dropout(0.5))
+    model.add(Dense(n_outputs, activation="softmax"))
+
+    model.summary()
+    return model
+
+
 def build_new_model(n_timesteps, n_features, n_outputs):
     model = Sequential()
     model.add(Conv2D(9, n_features, padding="same",
@@ -75,6 +119,7 @@ def build_new_model(n_timesteps, n_features, n_outputs):
     model.add(Conv2D(32, (4, 1), padding="same", activation="relu"))
     model.add(AveragePooling2D(pool_size=3))
     model.add(BatchNormalization())
+    model.add(Dropout(0.2))
     model.add(Flatten())
     model.add(Dense(16, activation="relu"))
     model.add(Dropout(0.1))
@@ -97,22 +142,24 @@ def build_dsconv_cnn(n_timesteps, n_features, n_outputs):
     model.add(SeparableConv2D(32, (4, 1), padding="same", activation="relu"))
     model.add(MaxPooling2D((3, 1)))
     model.add(BatchNormalization())
-
-    model.add(Flatten())
-    model.add(Dense(8, activation="relu"))
-    model.add(Dropout(0.1))
+    model.add(Dropout(0.2))
     model.add(Dense(n_outputs, activation="softmax"))
     model.summary()
     return model
 
 
-def prepare_training_data_shape(train_X, test_X):
+def prepare_training_data_shape(train_X, test_X, variant):
     train_X_shape = train_X.shape
     test_X_shape = test_X.shape
-    train_X = train_X.reshape(-1, train_X_shape[1],
-                              train_X_shape[2], 1).astype(np.float32)
-    test_X = test_X.reshape(-1, test_X_shape[1],
-                            test_X_shape[2], 1).astype(np.float32)
+    if variant != 'cnn_lstm':
+        train_X = train_X.reshape(-1, train_X_shape[1],
+                                  train_X_shape[2], 1).astype(np.float32)
+        test_X = test_X.reshape(-1, test_X_shape[1],
+                                test_X_shape[2], 1).astype(np.float32)
+    if variant == 'cnn_lstm':
+        n_steps, n_length = 4, 32
+        train_X = train_X.reshape((train_X.shape[0], n_steps, n_length, 12))
+        test_X = test_X.reshape((test_X.shape[0], n_steps, n_length, 12))
     return train_X, test_X
 
 
@@ -125,12 +172,14 @@ def get_ml_model(variant, timesteps, features, outputs):
         return build_dsconv_cnn(timesteps, features, outputs)
     elif(variant == 'cnn_new'):
         return build_new_model(timesteps, features, outputs)
+    elif(variant == 'build_cnn2'):
+        return build_cnn2(timesteps, features, outputs)
     pass
 
 
 def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, epochs=10, batch_size=50, variant='cnn'):
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
-    train_X, test_X = prepare_training_data_shape(train_X, test_X)
+    train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
     model = get_ml_model(variant, n_timesteps, n_features, n_outputs)
     if not model:
         raise Exception(
@@ -143,11 +192,14 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
         keras.callbacks.ModelCheckpoint(
             filepath=model_filepath,
             monitor='val_loss', save_best_only=True, mode="min"),
-        keras.callbacks.EarlyStopping(monitor='val_accuracy', mode='max', min_delta=0.8, patience=100) #patience 20 gave a better result
+        # patience 20 gave a better result
+        keras.callbacks.EarlyStopping(
+            monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
     ]
     print(train_X.shape)
+    optimizer = keras.optimizers.Adam(lr=1e-3)
     model.compile(loss="categorical_crossentropy",
-                  optimizer="adam", metrics=["accuracy"])
+                  optimizer=optimizer, metrics=["accuracy"])
     history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
                         callbacks=callbacks_list, batch_size=batch_size,
                         validation_split=0.2
