@@ -10,7 +10,9 @@ SENSORS = {
     "RIGHT": "RIGHT",
 }
 SENSORS_LIST = [SENSORS["LEFT"], SENSORS["RIGHT"]]
-sessions = ['session1', 'session2', 'session3', 'session4', 'session5', 'session6']
+sessions = ['session1', 'session2', 'session3',
+            'session4', 'session5', 'session6']
+# good session 2, 4, 6
 # sessions = ['session4']
 DEFAULT_SESSIONS = sessions[0]
 
@@ -153,3 +155,12 @@ def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subj
     encoded_test_y = tf.keras.utils.to_categorical(test_y)
 
     return train_X, test_X, encoded_train_y, encoded_test_y, train_y, test_y
+
+def compute_resultant_acceleration(X):
+    return np.sqrt(X[:,:,0] **2 + X[:,:,1] ** 2 + X[:,:,2] ** 2)
+
+def compute_resultant_gyro(X):
+    return np.sqrt(X[:,:,3] **2 + X[:,:,4] ** 2 + X[:,:,5] ** 2)
+
+def compute_resultant_angle(X):
+    return np.sqrt(X[:,:,6] **2 + X[:,:,7] ** 2 + X[:,:,8] ** 2)
