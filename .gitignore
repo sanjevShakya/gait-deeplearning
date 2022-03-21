@@ -157,3 +157,4 @@ cython_debug/
 #.idea/
 
 *.hdf5
+*.tflite

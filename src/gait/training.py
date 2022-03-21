@@ -147,6 +147,7 @@ def build_cnn(n_timesteps, n_features, n_outputs):
     model.add(Dropout(0.1))
     model.add(Dense(n_outputs, activation="softmax"))
     model.summary()
+    print('Model size:', calculate_model_size(model))
     return model
 
 
@@ -233,6 +234,30 @@ def build_cnn_stats(n_timesteps, n_features, n_outputs, statistics):
     model = tf.keras.models.Model(
         inputs=[inputs1, input2], outputs=net_combined)
     model.summary()
+    return model
+
+def build_cnn_stats_small(n_timesteps, n_features, n_outputs, statistics):
+    model = Sequential()
+    inputs1 = Input(shape=(n_timesteps, n_features, 1))
+    net = Conv2D(64, 3, strides=2, padding="same")(inputs1)
+    net = BatchNormalization()(net)
+    net = Activation('relu')(net)
+    net = AveragePooling2D()(net)
+    net = Conv2D(64, 3, strides=2, padding="same")(net)
+    net = BatchNormalization()(net)
+    net = Activation('relu')(net)
+    net = AveragePooling2D()(net)
+    net = Flatten()(net)
+    input2 = Input(shape=statistics.shape[1])
+    net_combined = Concatenate()([net, input2])
+    net_combined = Dense(32, activation="relu")(net_combined)
+    net_combined = Dropout(0.1)(net_combined)
+    net_combined = Dense(n_outputs, activation="softmax")(net_combined)
+
+    model = tf.keras.models.Model(
+        inputs=[inputs1, input2], outputs=net_combined)
+    model.summary()
+    print('Model Size:', calculate_model_size(model))
     return model
 
 
@@ -352,7 +377,7 @@ def train_model_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXS
     variant = 'cnn_stat'
     train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
     quantize_model = tfmot.quantization.keras.quantize_model
-    q_aware_model = quantize_model(build_cnn_stats(
+    q_aware_model = quantize_model(build_cnn_stats_small(
         n_timesteps, n_features, n_outputs, trainXStats))
     if not q_aware_model:
         raise Exception(
@@ -525,7 +550,7 @@ def train_2dcnn_lstm_model_quant_aware(train_X, train_y, test_X, test_y, overlap
     return q_aware_model, history
 
 
-def train_lstm_model(train_X, train_y, test_X, test_y, trainXStats, testXStats, overlap_percent, verbose=1, epochs=10, batch_size=50):
+def train_lstm_model(train_X, train_y, overlap_percent, verbose=1, epochs=10, batch_size=50):
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
     variant = 'lstm'
     model = get_ml_model(variant, n_timesteps, n_features, n_outputs);
@@ -547,7 +572,7 @@ def train_lstm_model(train_X, train_y, test_X, test_y, trainXStats, testXStats, 
     optimizer = keras.optimizers.Adam(1e-5)
     model.compile(loss="categorical_crossentropy",
                           optimizer=optimizer, metrics=["accuracy"])
-    history = model.fit([train_X, trainXStats], train_y, epochs=epochs, verbose=verbose,
+    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
                                 callbacks=callbacks_list, batch_size=batch_size,
                                 validation_split=0.2
                                 )
