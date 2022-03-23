@@ -24,6 +24,7 @@ MaxPooling1D = tf.keras.layers.MaxPooling1D
 Conv1D = tf.keras.layers.Conv1D
 GlobalAveragePooling1D = tf.keras.layers.GlobalAveragePooling1D
 Input = tf.keras.Input
+InputLayer = tf.keras.layers.InputLayer
 Concatenate = tf.keras.layers.Concatenate
 
 
@@ -236,27 +237,53 @@ def build_cnn_stats(n_timesteps, n_features, n_outputs, statistics):
     model.summary()
     return model
 
+
+def build_cnn_stats_small_simple(n_timesteps, n_features, n_outputs):
+    model = Sequential()
+    model.add(InputLayer(input_shape=(n_timesteps, n_features, 1)))
+    model.add(Conv2D(64, (4, n_features), strides=1, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(AveragePooling2D((3, 3)))
+    model.add(Dropout(0.1))
+    model.add(Conv2D(16, (n_features, 1), strides=1, padding="same"))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(AveragePooling2D((3, 1)))
+    model.add(Dropout(0.1))
+    model.add(Flatten())
+    model.add(Dense(8, activation="relu"))
+    model.add(Dropout(0.1))
+    model.add(Dense(n_outputs, activation="softmax"))
+
+    print('Model Size:', calculate_model_size(model))
+
+    return model
+
+
 def build_cnn_stats_small(n_timesteps, n_features, n_outputs, statistics):
     model = Sequential()
     inputs1 = Input(shape=(n_timesteps, n_features, 1))
-    net = Conv2D(64, 3, strides=2, padding="same")(inputs1)
+    net = Conv2D(64, (4, n_features), strides=1, padding="same")(inputs1)
     net = BatchNormalization()(net)
     net = Activation('relu')(net)
-    net = AveragePooling2D()(net)
-    net = Conv2D(64, 3, strides=2, padding="same")(net)
+    net = Dropout(0.1)(net)
+    net = AveragePooling2D((3, 3))(net)
+    net = Conv2D(4, (n_features, 1), strides=1, padding="same")(inputs1)
     net = BatchNormalization()(net)
     net = Activation('relu')(net)
-    net = AveragePooling2D()(net)
+    net = AveragePooling2D((3, 1))(net)
+    net = Dropout(0.1)(net)
     net = Flatten()(net)
     input2 = Input(shape=statistics.shape[1])
     net_combined = Concatenate()([net, input2])
-    net_combined = Dense(32, activation="relu")(net_combined)
+    net_combined = Dense(8, activation="relu")(net_combined)
     net_combined = Dropout(0.1)(net_combined)
     net_combined = Dense(n_outputs, activation="softmax")(net_combined)
 
     model = tf.keras.models.Model(
         inputs=[inputs1, input2], outputs=net_combined)
-    model.summary()
+
     print('Model Size:', calculate_model_size(model))
     return model
 
@@ -376,10 +403,9 @@ def train_model_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXS
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
     variant = 'cnn_stat'
     train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
-    quantize_model = tfmot.quantization.keras.quantize_model
-    q_aware_model = quantize_model(build_cnn_stats_small(
-        n_timesteps, n_features, n_outputs, trainXStats))
-    if not q_aware_model:
+    model = build_cnn_stats_small_simple(
+        n_timesteps, n_features, n_outputs)
+    if not model:
         raise Exception(
             'model', 'Model creation failed. Arguments not correct')
     model_filepath = get_model_file_path(
@@ -395,14 +421,14 @@ def train_model_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXS
             monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
     ]
     optimizer = keras.optimizers.Adam(1e-5)
-    q_aware_model.compile(loss="categorical_crossentropy",
-                          optimizer=optimizer, metrics=["accuracy"])
-    history = q_aware_model.fit([train_X, trainXStats], train_y, epochs=epochs, verbose=verbose,
-                                callbacks=callbacks_list, batch_size=batch_size,
-                                validation_split=0.2
-                                )
+    model.compile(loss="categorical_crossentropy",
+                  optimizer=optimizer, metrics=["accuracy"])
+    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
+                        callbacks=callbacks_list, batch_size=batch_size,
+                        validation_split=0.2
+                        )
 
-    return q_aware_model, history
+    return model, history
 
 
 def train_model_cnn_lstm_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXStats, overlap_percent, verbose=1, epochs=10, batch_size=50):
@@ -553,7 +579,7 @@ def train_2dcnn_lstm_model_quant_aware(train_X, train_y, test_X, test_y, overlap
 def train_lstm_model(train_X, train_y, overlap_percent, verbose=1, epochs=10, batch_size=50):
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
     variant = 'lstm'
-    model = get_ml_model(variant, n_timesteps, n_features, n_outputs);
+    model = get_ml_model(variant, n_timesteps, n_features, n_outputs)
     if not model:
         raise Exception(
             'model', 'Model creation failed. Arguments not correct')
@@ -571,10 +597,79 @@ def train_lstm_model(train_X, train_y, overlap_percent, verbose=1, epochs=10, ba
     ]
     optimizer = keras.optimizers.Adam(1e-5)
     model.compile(loss="categorical_crossentropy",
-                          optimizer=optimizer, metrics=["accuracy"])
+                  optimizer=optimizer, metrics=["accuracy"])
     history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
-                                callbacks=callbacks_list, batch_size=batch_size,
-                                validation_split=0.2
-                                )
+                        callbacks=callbacks_list, batch_size=batch_size,
+                        validation_split=0.2
+                        )
+
+    return model, history
+
+
+def train_cnn_model_simple(train_X, train_y, test_X, overlap_percent, verbose=1, epochs=10, batch_size=50):
+    n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
+    variant = 'cnn'
+    train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
+    model = build_cnn_stats_small_simple(
+        n_timesteps, n_features, n_outputs)
+    if not model:
+        raise Exception(
+            'model', 'Model creation failed. Arguments not correct')
+    model_filepath = get_model_file_path(
+        overlap_percent,
+        'best_model.{epoch:02d}-{val_loss:.2f}-{val_accuracy:.2f}.hdf5')
+    print('Model saved at filepath : {}'.format(model_filepath))
+    callbacks_list = [
+        keras.callbacks.ModelCheckpoint(
+            filepath=model_filepath,
+            monitor='val_loss', save_best_only=True, mode="min"),
+        # patience 20 gave a better result
+        keras.callbacks.EarlyStopping(
+            monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
+    ]
+    optimizer = keras.optimizers.Adam(1e-5)
+    model.compile(loss="categorical_crossentropy",
+                  optimizer=optimizer, metrics=["accuracy"])
+    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
+                        callbacks=callbacks_list, batch_size=batch_size,
+                        validation_split=0.2
+                        )
+
+    return model, history
+
+
+def reshape_function(data):
+    reshaped_data = tf.reshape(data, [-1, 12, 1])
+    return reshaped_data
+
+
+def cnn_final_retrain(train_X, train_y, overlap_percent, verbose=1, epochs=10, batch_size=50):
+    n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
+    model = build_cnn_stats_small_simple(
+        n_timesteps, n_features, n_outputs)
+    if not model:
+        raise Exception(
+            'model', 'Model creation failed. Arguments not correct')
+    model_filepath = get_model_file_path(
+        overlap_percent,
+        'best_model.{epoch:02d}-{val_loss:.2f}-{val_accuracy:.2f}.hdf5')
+    print('Model saved at filepath : {}'.format(model_filepath))
+    callbacks_list = [
+        keras.callbacks.ModelCheckpoint(
+            filepath=model_filepath,
+            monitor='val_loss', save_best_only=True, mode="min"),
+        # patience 20 gave a better result
+        keras.callbacks.EarlyStopping(
+            monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
+    ]
+    optimizer = keras.optimizers.Adam(1e-5)
+    print(train_y.shape);
+
+    model.compile(loss="categorical_crossentropy",
+                  optimizer=optimizer, metrics=["accuracy"])
+    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
+                        callbacks=callbacks_list, batch_size=batch_size,
+                        validation_split=0.2
+                        )
 
     return model, history

@@ -149,8 +149,8 @@ def split_test_train_by_subjects(X, y, subjects, train_percent=0.8, exclude_subj
     train_y = np.array(train_y, dtype=int)
     test_y = np.array(test_y, dtype=int)
 
-    train_y = train_y
-    test_y = test_y
+    train_y = train_y - 1
+    test_y = test_y - 1
     encoded_train_y = tf.keras.utils.to_categorical(train_y)
     encoded_test_y = tf.keras.utils.to_categorical(test_y)
 

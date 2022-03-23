@@ -16,19 +16,29 @@ c9EB3mOQckRCc8Bz
 csujYZktn88ftTTv
 
 
+
 Session1 BAD IDs
 
+'MMuX9YIh4NTbLZLM',
+'NKdnm6cN3KKAx7R4',
+'PE8D53oX060qLbdX',
+'xYdtS1F8tDyjEIgN',
 'EUbKPOSQgjccjtvi' 
-'MMuX9YIh4NTbLZLM' 
 'PE8D53oX060qLbdX' 
 'ddAeJA42PXvwthbW' 
 'nan' 
-'xYdtS1F8tDyjEIgN'
+
+Session2 BAD IDs
+--
 
 Session3 BAD IDs
 'LLZjAPTyj7muHsEf',
 'cbOZWnI7s1y8oLD4',
 'ddAeJA42PXvwthbW',
+'1ZstYhEKzKKfGnMW',
+'LLZjAPTyj7muHsEf',
+'bQsRwKxgJiXTzo6P',
+
 
 Session5 Bad Ids
 sUZBISq61Y7I5tqQ
