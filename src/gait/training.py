@@ -26,6 +26,10 @@ GlobalAveragePooling1D = tf.keras.layers.GlobalAveragePooling1D
 Input = tf.keras.Input
 InputLayer = tf.keras.layers.InputLayer
 Concatenate = tf.keras.layers.Concatenate
+Bidirectional = tf.keras.layers.Bidirectional
+Lambda = tf.keras.layers.Lambda
+Reshape = tf.keras.layers.Reshape
+
 
 
 def calculate_model_size(model):
@@ -80,6 +84,15 @@ def build_cnn_lstm_stat(n_features, n_outputs, statistics):
     return model
 
 
+def ReshapeLayer(x):
+    
+    shape = x.shape
+    
+    # 1 possibility: H,W*channel
+    reshape = Reshape((shape[1],shape[2]*shape[3]))(x)
+    
+    return reshape
+
 def build_final_cnn_lstm(n_features, n_outputs):
     model = Sequential()
 
@@ -106,6 +119,26 @@ def build_final_cnn_lstm(n_features, n_outputs):
     model.summary()
     return model
 
+def build_cnn_bilstm(n_features, n_outputs):
+    model = Sequential()
+    model.add(TimeDistributed(InputLayer(input_shape=(None, 32, n_features, 1))))
+    model.add(TimeDistributed(Conv2D(64, (4, n_features), strides=1, padding="same")))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Activation('relu')))
+    model.add(TimeDistributed(Dropout(0.2)))
+    model.add(TimeDistributed(Conv2D(8, (n_features, 1), strides=1, padding="same")))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Activation('relu')))
+    model.add(Dropout(0.2))
+    model.add(TimeDistributed(GlobalAveragePooling2D()))
+    model.add(TimeDistributed(Flatten()))
+    model.add(LSTM(100))
+    model.add(Dropout(0.2))
+    model.add(Dense(100, activation='relu'))
+    model.add(Dense(n_outputs, activation='softmax'))
+    # model.summary()
+    print("Model size: ", calculate_model_size(model))
+    return model
 
 def build_cnn_lstm(n_timesteps, n_features, n_outputs):
     model = Sequential()
@@ -246,7 +279,7 @@ def build_cnn_stats_small_simple(n_timesteps, n_features, n_outputs):
     model.add(Activation('relu'))
     model.add(AveragePooling2D((3, 3)))
     model.add(Dropout(0.1))
-    model.add(Conv2D(16, (n_features, 1), strides=1, padding="same"))
+    model.add(Conv2D(8, (n_features, 1), strides=1, padding="same"))
     model.add(BatchNormalization())
     model.add(Activation('relu'))
     model.add(AveragePooling2D((3, 1)))
@@ -267,14 +300,15 @@ def build_cnn_stats_small(n_timesteps, n_features, n_outputs, statistics):
     net = Conv2D(64, (4, n_features), strides=1, padding="same")(inputs1)
     net = BatchNormalization()(net)
     net = Activation('relu')(net)
-    net = Dropout(0.1)(net)
     net = AveragePooling2D((3, 3))(net)
-    net = Conv2D(4, (n_features, 1), strides=1, padding="same")(inputs1)
+    net = Dropout(0.1)(net)
+    net = Conv2D(8, (n_features, 1), strides=1, padding="same")(net)
     net = BatchNormalization()(net)
     net = Activation('relu')(net)
     net = AveragePooling2D((3, 1))(net)
     net = Dropout(0.1)(net)
     net = Flatten()(net)
+
     input2 = Input(shape=statistics.shape[1])
     net_combined = Concatenate()([net, input2])
     net_combined = Dense(8, activation="relu")(net_combined)
@@ -345,8 +379,8 @@ def prepare_training_data_shape(train_X, test_X, variant):
                                 test_X_shape[2], 1).astype(np.float32)
     if variant == 'cnn_lstm' or variant == 'cnn_lstm_stat':
         n_steps, n_length = 4, 32
-        train_X = train_X.reshape((train_X.shape[0], n_steps, n_length, 12))
-        test_X = test_X.reshape((test_X.shape[0], n_steps, n_length, 12))
+        train_X = train_X.reshape((train_X.shape[0], n_steps, n_length, train_X.shape[1]))
+        test_X = test_X.reshape((test_X.shape[0], n_steps, n_length, test_X.shape[1]))
     return train_X, test_X
 
 
@@ -399,12 +433,12 @@ def train_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, ep
     return model, history, evaluation_history
 
 
-def train_model_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXStats, overlap_percent, verbose=1, epochs=10, batch_size=50):
+def train_model_with_stats(train_X, train_y, test_X, trainXStats, overlap_percent, verbose=1, epochs=10, batch_size=50):
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
     variant = 'cnn_stat'
     train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
-    model = build_cnn_stats_small_simple(
-        n_timesteps, n_features, n_outputs)
+    model = build_cnn_stats_small(
+        n_timesteps, n_features, n_outputs, trainXStats)
     if not model:
         raise Exception(
             'model', 'Model creation failed. Arguments not correct')
@@ -420,10 +454,10 @@ def train_model_with_stats(train_X, train_y, test_X, test_y, trainXStats, testXS
         keras.callbacks.EarlyStopping(
             monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
     ]
-    optimizer = keras.optimizers.Adam(1e-5)
+    optimizer = keras.optimizers.Adam(1e-4)
     model.compile(loss="categorical_crossentropy",
                   optimizer=optimizer, metrics=["accuracy"])
-    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
+    history = model.fit([train_X, trainXStats], train_y, epochs=epochs, verbose=verbose,
                         callbacks=callbacks_list, batch_size=batch_size,
                         validation_split=0.2
                         )
@@ -508,8 +542,8 @@ def change_x_lstm_shape(X):
 
 def reshape_cnn2dlstm_x_train_test(train_X, test_X):
     n_steps, n_length = 4, 32
-    train_X = train_X.reshape((train_X.shape[0], n_steps, n_length, 12))
-    test_X = test_X.reshape((test_X.shape[0], n_steps, n_length, 12))
+    train_X = train_X.reshape((train_X.shape[0], n_steps, n_length, train_X.shape[2]))
+    test_X = test_X.reshape((test_X.shape[0], n_steps, n_length, test_X.shape[2]))
     train_X_shape = train_X.shape
     test_X_shape = test_X.shape
     train_X = train_X.reshape(-1, train_X_shape[1],
@@ -519,7 +553,7 @@ def reshape_cnn2dlstm_x_train_test(train_X, test_X):
     return train_X, test_X
 
 
-def train_2dcnn_lstm_model(train_X, train_y, test_X, test_y, overlap_percent, verbose=1, epochs=10, batch_size=50, variant='cnn'):
+def train_2dcnn_lstm_model(train_X, train_y, test_X, overlap_percent, verbose=1, epochs=10, batch_size=50, variant='cnn'):
     n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
     model = build_final_cnn_lstm(n_features, n_outputs)
     train_X, test_X = reshape_cnn2dlstm_x_train_test(train_X, test_X)
@@ -665,6 +699,40 @@ def cnn_final_retrain(train_X, train_y, overlap_percent, verbose=1, epochs=10, b
     optimizer = keras.optimizers.Adam(1e-5)
     print(train_y.shape);
 
+    model.compile(loss="categorical_crossentropy",
+                  optimizer=optimizer, metrics=["accuracy"])
+    history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,
+                        callbacks=callbacks_list, batch_size=batch_size,
+                        validation_split=0.2
+                        )
+
+    return model, history
+
+
+def train_cnn_bilstm_model(train_X, train_y, test_X, overlap_percent, verbose=1, epochs=10, batch_size=50):
+    n_timesteps, n_features, n_outputs = timeseries_shapes(train_X, train_y)
+    variant = 'cnn'
+    train_X, test_X = prepare_training_data_shape(train_X, test_X, variant)
+    model = build_cnn_bilstm(
+        n_timesteps, n_features, n_outputs)
+    train_X, test_X = reshape_cnn2dlstm_x_train_test(train_X, test_X)
+    
+    if not model:
+        raise Exception(
+            'model', 'Model creation failed. Arguments not correct')
+    model_filepath = get_model_file_path(
+        overlap_percent,
+        'best_model.{epoch:02d}-{val_loss:.2f}-{val_accuracy:.2f}.hdf5')
+    print('Model saved at filepath : {}'.format(model_filepath))
+    callbacks_list = [
+        keras.callbacks.ModelCheckpoint(
+            filepath=model_filepath,
+            monitor='val_loss', save_best_only=True, mode="min"),
+        # patience 20 gave a better result
+        keras.callbacks.EarlyStopping(
+            monitor='val_accuracy', mode='max', min_delta=0.8, patience=100)
+    ]
+    optimizer = keras.optimizers.Adam(1e-4)
     model.compile(loss="categorical_crossentropy",
                   optimizer=optimizer, metrics=["accuracy"])
     history = model.fit(train_X, train_y, epochs=epochs, verbose=verbose,

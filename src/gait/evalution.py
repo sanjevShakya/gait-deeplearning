@@ -11,7 +11,29 @@ history_filename = 'history.csv'
 evaluation_filename = 'evaluation.csv'
 model_accuracy_loss_filename = "accuracy_loss.jpg"
 confusion_matrix_figure_filename = "confusion_matrix_figure_filename.jpg"
+classification_report_filename = 'classification_report.csv'
 validations_predictions_filename = "validation_predictions.csv"
+
+def classification_report_csv(report, filePath):
+    report_data = []
+    lines = report.split('\n')
+    print('--------CLASSIFICATION REPORT--------')
+    print(report)
+    print('-------------------------------------')
+    try: 
+        for line in lines[2:-5]:
+            row = {}
+            row_data = line.split('      ')
+            row['class'] = row_data[1].strip()
+            row['precision'] = float(row_data[2])
+            row['recall'] = float(row_data[3])
+            row['f1_score'] = float(row_data[4])
+            row['support'] = float(row_data[5])
+            report_data.append(row)
+        dataframe = pd.DataFrame.from_dict(report_data)
+        dataframe.to_csv(filePath, index = False)
+    except:
+        pass
 
 
 def save_history(history, overlap_percent):
@@ -60,6 +82,17 @@ def save_accuracy_loss_figure(history, overlap_percent):
     plt.show()
 
 
+def save_classification_report(validations, predictions, overlap_percent):
+    dir_path, file_path = get_log_file_path(
+        overlap_percent, classification_report_filename)
+    create_dir(dir_path)
+    target_names = ['1', '2',
+                    '3', '4', '5']
+    report = classification_report(
+        validations, predictions, target_names=target_names)
+    classification_report_csv(report, file_path)
+
+
 def save_confusion_matrix_figure(validations, predictions, overlap_percent, sns):
     dir_path, figure_path = get_log_file_path(
         overlap_percent, confusion_matrix_figure_filename)
@@ -94,6 +127,7 @@ def compute_validations_predictions_with_stats(model, X_test, y_test, X_test_sta
     max_y_test = np.argmax(y_test, axis=1)
 
     return max_y_pred_test, max_y_test
+
 
 def compute_validations_predictions_cnn_multihead_with_stats(model, X_test, y_test, X_test_stats):
     y_pred_test = model.predict([X_test, X_test, X_test, X_test_stats])
